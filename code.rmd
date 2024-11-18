@@ -58,8 +58,9 @@ Les paramètres :
   adls - Same but filled by a surrogate not the patient - 31% of missing values
   sfdm2 - target
   adlsc - 
+  
 ```{r}
-(sum(is.na(patient_data$ph))/dim(patient_data[0]))*100
+sum(is.na(patient_data$sfdm)) + sum(is.na(patient_data$income))
 ```
 The diffrents target values are : 
 ```{r}
@@ -68,27 +69,12 @@ Y2 <- patient_data$hospdead
 Y3 <- patient_data$sfdm2
 ```
 
-La variable age est importante, cependant on a des floats il faudrait au minimum avoir des entiers, on pourrait aussi catégoriser selon des groupes d'âges, on releve l'age min et max. On a 0 NA  (tranche d'ages : 19-40 ans, 41 à 65 ans, 65 et plus)
-```{r}
-min(patient_data$age)
-max(patient_data$age)
-patient_data$age <- round(patient_data$age)
-head(patient_data$age)
-hist(patient_data$age, breaks=10)
-hist(patient_data$age, breaks=3)
-sum((patient_data$age>60))
-
-```
-On remarque que la majorité des patients ont plus de 60 ans (48%) et 60% ont plus de 65 ans, une portion infime appartient à la tranche d'age <20ans et >100 ans
-  
-
-a enlever :
-aps sps sur2m sur6m prg2m prg6m dnr dnrday
+a enlever : aps sps sur2m sur6m prg2m prg6m dnr dnrday
 
 ```{r}
 colonnes_a_supprimer <- c("aps", "sps", "sur2m", "sur6m", "prg2m", "prg6m", "dnr", "dnrday")
-patient_data_2 <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
-head(patient_data_2)
+patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
+head(patient_data)
 ```
 Arranger dzgroup (catégorique), dzclass (catégorique), income (catégorique), race (catégorique), ca ,
 remplir NA :  edu (17.95%), income (33%) scoma (<1%), charges (2%),  totcst (~10%), totmcst (38%), avtisst (0.9%), meanbp (0.01%), wblc (2.3%), hrt (0.01%), temp (0.01%), pafi (25.5%), alb (37%), bili (28.6%), crea (0.7%), sod (0.01%), ph (25.1%), glucose (49%), bun(47%), urine (53%), adlp (61%), adls (31%)
@@ -104,7 +90,8 @@ standard_values <- list(
   crea = 1.01,  # Creatinine
   bun = 6.51,   # BUN
   wblc = 9,     # White blood count (en milliers)
-  urine = 2502  # Urine output
+  urine = 2502,  # Urine output
+  income = "$11-$25k"  # Salaire moyen aux USA autour de 1990
 )
 
 # Fonction pour imputer les valeurs manquantes avec les normales
@@ -116,6 +103,21 @@ impute_values <- function(data, colonnes, valeurs) {
   }
   return(data)
 }
+
+# Imputation par la moyenne pour les colonnes restantes
+impute_moy <- function(data) {
+  for (col in names(data)) {
+    if (any(is.na(data[[col]]))) {  # Vérifie si la colonne contient des NA
+      if (is.numeric(data[[col]])) {  # Vérifie si la colonne est numérique
+        data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+      }
+    }
+  }
+  return(data)
+}
+
+
+patient_data <- impute_moy(patient_data)
 
 # Liste des colonnes à imputer
 columns_to_assign <- names(standard_values)
@@ -148,5 +150,13 @@ patient_data$ca <- as.numeric(factor(patient_data$ca, levels = c("no", "yes", "m
 
 patient_data$sfdm2 <- as.numeric(factor(patient_data$sfdm2, levels = c("no(M2 and SIP pres)", "adl>=4 (>=5 if sur)", "SIP>=30", "Coma or Intub","<2 mo. follow-up" )))
 
+head(patient_data[, c("sex", "race", "income", "dzgroup", "dzclass", "ca", "sfdm2")])
+
 patient_data
+```
+
+```{r}
+summary(patient_data)
+table(is.na(patient_data))  # Vérifier les valeurs manquantes
+
 ```
