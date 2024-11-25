@@ -11,6 +11,7 @@ patient_data = read.table("support2.csv", sep=",", header=TRUE);
 patient_data[patient_data == ""] <- NA # certains champs sont vides, remplace par NA
 head(patient_data, 500)
 ```
+
 Les paramètres : 
   age (of patients) - no NA
   death (on 31/12/1994) - no NA - not all patients are followed up because discharged - Target value
@@ -60,7 +61,7 @@ Les paramètres :
   adlsc - 
   
 ```{r}
-sum(is.na(patient_data$sfdm)) + sum(is.na(patient_data$income))
+sum(is.na(patient_data$sfdm2)) + sum(is.na(patient_data$race))
 ```
 The diffrents target values are : 
 ```{r}
@@ -69,16 +70,17 @@ Y2 <- patient_data$hospdead
 Y3 <- patient_data$sfdm2
 ```
 
-a enlever : aps sps sur2m sur6m prg2m prg6m dnr dnrday
+a enlever : aps sps sur2m sur6m prg2m prg6m dnr dnrday; à supprimer aussi : edu (pas de relation logique avec le reste), adlp (61% de valeurs manquantes, énorme)
 
 ```{r}
-colonnes_a_supprimer <- c("aps", "sps", "sur2m", "sur6m", "prg2m", "prg6m", "dnr", "dnrday")
+colonnes_a_supprimer <- c("aps", "sps", "sur2m", "sur6m", "prg2m", "prg6m", "dnr", "dnrday", "edu", "adlp")
 patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
 head(patient_data)
 ```
-Arranger dzgroup (catégorique), dzclass (catégorique), income (catégorique), race (catégorique), ca ,
-remplir NA :  edu (17.95%), income (33%) scoma (<1%), charges (2%),  totcst (~10%), totmcst (38%), avtisst (0.9%), meanbp (0.01%), wblc (2.3%), hrt (0.01%), temp (0.01%), pafi (25.5%), alb (37%), bili (28.6%), crea (0.7%), sod (0.01%), ph (25.1%), glucose (49%), bun(47%), urine (53%), adlp (61%), adls (31%)
-à supprimer : edu 
+Arranger dzgroup (catégorique), dzclass (catégorique), income (catégorique), race (catégorique), ca
+remplir NA :  edu (17.95%), scoma (<1%), charges (2%),  totcst (~10%), totmcst (38%), avtisst (0.9%), meanbp (0.01%), hrt (0.01%), temp (0.01%), sod (0.01%), ph (25.1%), glucose (49%),  adlp (61%), adls (31%)
+
+pafi (25.5%), alb (37%), bili (28.6%), crea (0.7%), bun(47%), wblc (2.3%), urine (53%), income (33%),
 comment remplir les valeurs manquantes pour race ? qui est une variable à priori importante
 
 ```{r}
@@ -91,6 +93,7 @@ standard_values <- list(
   bun = 6.51,   # BUN
   wblc = 9,     # White blood count (en milliers)
   urine = 2502,  # Urine output
+  race = "other",
   income = "$11-$25k"  # Salaire moyen aux USA autour de 1990
 )
 
@@ -160,3 +163,7 @@ summary(patient_data)
 table(is.na(patient_data))  # Vérifier les valeurs manquantes
 
 ```
+```{r}
+
+```
+
