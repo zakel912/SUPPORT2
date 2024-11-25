@@ -73,7 +73,7 @@ Y3 <- patient_data$sfdm2
 a enlever : aps sps sur2m sur6m prg2m prg6m dnr dnrday; à supprimer aussi : edu (pas de relation logique avec le reste), adlp (61% de valeurs manquantes, énorme)
 
 ```{r}
-colonnes_a_supprimer <- c("aps", "sps", "sur2m", "sur6m", "prg2m", "prg6m", "dnr", "dnrday", "edu", "adlp")
+colonnes_a_supprimer <- c("aps", "sps", "surv2m", "surv6m", "prg2m", "prg6m", "dnr", "dnrday", "edu", "adlp")
 patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
 head(patient_data)
 ```
@@ -163,7 +163,42 @@ summary(patient_data)
 table(is.na(patient_data))  # Vérifier les valeurs manquantes
 
 ```
-```{r}
 
+Travaille sur la variable target dead : 
+
+```{r}
+colonnes_a_supprimer <- c("sfdm2", "hospdead")
+patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
+head(patient_data)
+```
+```{r}
+library(corrplot)
+cor_matrix <- cor(patient_data)
+cor_matrix[abs(cor_matrix) < 0.6] <- 0
+corrplot(cor_matrix, "color")
+```
+```{r}
+library(dplyr) # Manipulation des données
+library(caret) # Préparation des données et séparation en ensembles
+library(pROC) # Analyse ROC et calcul de l'AUC
+library(ggplot2) # Visualisation des résultats
+
+```
+
+
+```{r}
+set.seed(123) 
+
+trainIndex <- createDataPartition(patient_data$death, p = 0.8, list = FALSE)
+
+train_data <- patient_data[trainIndex, ]
+
+test_data <- patient_data[-trainIndex, ]
+```
+
+```{r}
+res = glm(patient_data$death ~., data=patient_data, family="binomial")
+mod_sum = summary(res)
+mod_sum
 ```
 
