@@ -197,8 +197,31 @@ test_data <- patient_data[-trainIndex, ]
 ```
 
 ```{r}
-res = glm(patient_data$death ~., data=patient_data, family="binomial")
+res = glm(train_data$death ~., data=train_data, family="binomial")
 mod_sum = summary(res)
 mod_sum
 ```
 
+```{r}
+coeff_data <- mod_sum$coefficients
+sorted_coeff <- coeff_data[order(coeff_data[, "Pr(>|z|)"]), ]
+most_significant_coeff <- head(sorted_coeff, 10)
+print(most_significant_coeff)
+```
+
+```{r}
+predicted_proba <- predict(res, newdata = test_data, type = "response")
+predicted_class <- ifelse(predicted_proba > 0.5, 1, 0)
+```
+
+```{r}
+conf_matrix <- table(test_data$death, predicted_class)
+print("Matrice de confusion :")
+print(conf_matrix)
+```
+
+```{r}
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Précision :", round(accuracy, 2)))
+
+```
