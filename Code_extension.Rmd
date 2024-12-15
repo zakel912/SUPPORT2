@@ -1,0 +1,112 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-12-09"
+---
+
+Analyse d'une extension : 
+
+---
+title: "Untitled"
+output: html_document
+date: "2024-11-27"
+---
+avec normalisation (aucun changement)
+Chargement et préparation des données
+
+```{r}
+patient_data <- read.table("support2.csv", sep = ",", header = TRUE)
+patient_data[patient_data == ""] <- NA
+
+standard_values <- list(
+  alb = 3.5, pafi = 333.3, bili = 1.01, crea = 1.01, bun = 6.51,
+  wblc = 9, urine = 2502, race = "other", income = "$11-$25k"
+)
+
+# Fonction pour imputer les valeurs manquantes avec les normales
+impute_values <- function(data, colonnes, valeurs) {
+  for (col in colonnes) {
+    if (col %in% names(data)) {
+      data[[col]][is.na(data[[col]])] <- valeurs[[col]]
+    }
+  }
+  return(data)
+}
+
+# Imputation par la moyenne pour les colonnes restantes
+impute_moy <- function(data) {
+  for (col in names(data)) {
+    if (any(is.na(data[[col]]))) {  # Vérifie si la colonne contient des NA
+      if (is.numeric(data[[col]])) {  # Vérifie si la colonne est numérique
+        data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+      }
+    }
+  }
+  return(data)
+}
+
+
+patient_data <- impute_values(patient_data, names(standard_values), standard_values)
+patient_data <- impute_moy(patient_data)
+
+patient_data$sex <- ifelse(patient_data$sex == "male", 1, 0)
+patient_data$race <- as.numeric(factor(patient_data$race, levels = c("missing", "black", "asian", "hispanic", "white", "other")))
+patient_data$income <- as.numeric(factor(patient_data$income, levels = c("under $11k", "$11-$25k", "$25-$50k", ">$50k")))
+patient_data$dzgroup <- as.numeric(factor(patient_data$dzgroup, levels = c("ARF/MOSF w/Sepsis", "CHF", "COPD", "Cirrhosis", "Colon Cancer", "Coma", "Lung Cancer", "MOSF w/Malig")))
+patient_data$dzclass <- as.numeric(factor(patient_data$dzclass, levels = c("ARF/MOSF", "COPD/CHF/Cirrhosis", "Cancer", "Coma")))
+patient_data$ca <- as.numeric(factor(patient_data$ca, levels = c("no", "yes", "metastatic")))
+patient_data$sfdm2 <- as.numeric(factor(patient_data$sfdm2, levels = c("no(M2 and SIP pres)", "adl>=4 (>=5 if sur)", "SIP>=30", "Coma or Intub","<2 mo. follow-up" )))
+
+# Normaliser les données 
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+normalize_z_score <- function(x) {
+  return ((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+
+# Liste des variables à normaliser
+variables_to_normalize <- c('slos', 'd.time', "num.co" ,'scoma', 'charges', 'totcst', 'totmcst', 'avtisst', 'meanbp', 'wblc', 'hrt', 'resp', 'temp', 'pafi', 'alb', 'bili', 'crea', 'sod', 'ph', 'glucose', 'bun', 'adls', 'adlsc', 'urine', "age")
+
+
+# Boucle pour appliquer la normalisation
+for (var in variables_to_normalize) {
+  patient_data[[var]] <- scale(patient_data[[var]])
+}
+
+colonnes_a_supprimer <- c("aps", "sps", "surv2m", "surv6m", "prg2m", "prg6m", "dnr", "dnrday", "sfdm2", "hospdead", "dzclass", "income", "charges", "totcst", "totmcst", "scoma", "edu", "race", "diabetes", "wblc", "hrt", "temp", "pafi", "sod", "ph", "adls")
+patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
+head(patient_data)
+```
+
+
+```{r}
+# Étape 3 : Appliquer K-means clustering
+set.seed(123)
+n_clusters <- 6
+kmeans_result <- kmeans(patient_data, centers = n_clusters, iter.max = 20)
+
+print(summary(kmeans_result))
+
+# Ajouter les clusters comme une nouvelle colonne
+patient_data$cluster <- kmeans_result$cluster
+
+# Étape 5 : Visualisation des clusters (en utilisant seulement les deux premières dimensions)
+# Cette partie utilise les deux premières colonnes du dataset pour la visualisation (si nécessaire, ajustez le choix des colonnes)
+
+# Si vous avez plus de 2 dimensions, vous pouvez réduire à 2 avec une PCA (Principal Component Analysis) :
+pca_result <- prcomp(patient_data, scale. = TRUE)
+pca_data <- as.data.frame(pca_result$x)
+
+# Plot les résultats du clustering (ici avec les 2 premières composantes principales)
+plot(pca_data$PC1, pca_data$PC2, col = kmeans_result$cluster, pch = 16, 
+     xlab = "PC1", ylab = "PC2", main = "Clustering K-means sur SUPPORT2")
+# Ajouter les centres des clusters au graphique
+points(pca_result$center[1], pca_result$center[2], col = 1:n_clusters, pch = 4, cex = 2, lwd = 3)
+
+# Étape 6 : Affichage des centres des clusters
+print("Centres des clusters :")
+print(kmeans_result$centers)
+```
+
