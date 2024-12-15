@@ -1,0 +1,293 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-11-27"
+---
+avec normalisation (aucun changement)
+Chargement et préparation des données
+
+```{r}
+patient_data <- read.table("support2.csv", sep = ",", header = TRUE)
+patient_data[patient_data == ""] <- NA
+head(patient_data, 10)
+```
+
+Variables disponibles et gestion des données manquantes
+Voici un résumé des variables et leur traitement :
+
+Variables principales à utiliser 
+age, sex, hospdead, slos, d.time, dzgroup, dz.class, num.co, scoma, charges, meanbp, wblc, hrt, temp, pafi, alb, bili, crea, sod, ph, bun, urine
+Variables à supprimer
+Les variables suivantes sont supprimées car inutiles ou trop incomplètes :
+
+aps, sps, surv2m, surv6m, prg2m, prg6m, dnr, dnrday, edu, adlp
+
+Gestion des valeurs manquantes
+Nous utilisons des valeurs standard pour certaines colonnes et des moyennes pour d'autres.
+
+```{r}
+
+standard_values <- list(
+  alb = 3.5, pafi = 333.3, bili = 1.01, crea = 1.01, bun = 6.51,
+  wblc = 9, urine = 2502, race = "other", income = "$11-$25k"
+)
+
+# Fonction pour imputer les valeurs manquantes avec les normales
+impute_values <- function(data, colonnes, valeurs) {
+  for (col in colonnes) {
+    if (col %in% names(data)) {
+      data[[col]][is.na(data[[col]])] <- valeurs[[col]]
+    }
+  }
+  return(data)
+}
+
+# Imputation par la moyenne pour les colonnes restantes
+impute_moy <- function(data) {
+  for (col in names(data)) {
+    if (any(is.na(data[[col]]))) {  # Vérifie si la colonne contient des NA
+      if (is.numeric(data[[col]])) {  # Vérifie si la colonne est numérique
+        data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+      }
+    }
+  }
+  return(data)
+}
+
+
+patient_data <- impute_values(patient_data, names(standard_values), standard_values)
+patient_data <- impute_moy(patient_data)
+
+patient_data
+
+```
+
+Encodage des variables catégoriques
+
+```{r}
+
+patient_data$sex <- ifelse(patient_data$sex == "male", 1, 0)
+patient_data$race <- as.numeric(factor(patient_data$race, levels = c("missing", "black", "asian", "hispanic", "white", "other")))
+patient_data$income <- as.numeric(factor(patient_data$income, levels = c("under $11k", "$11-$25k", "$25-$50k", ">$50k")))
+patient_data$dzgroup <- as.numeric(factor(patient_data$dzgroup, levels = c("ARF/MOSF w/Sepsis", "CHF", "COPD", "Cirrhosis", "Colon Cancer", "Coma", "Lung Cancer", "MOSF w/Malig")))
+patient_data$dzclass <- as.numeric(factor(patient_data$dzclass, levels = c("ARF/MOSF", "COPD/CHF/Cirrhosis", "Cancer", "Coma")))
+patient_data$ca <- as.numeric(factor(patient_data$ca, levels = c("no", "yes", "metastatic")))
+patient_data$sfdm2 <- as.numeric(factor(patient_data$sfdm2, levels = c("no(M2 and SIP pres)", "adl>=4 (>=5 if sur)", "SIP>=30", "Coma or Intub","<2 mo. follow-up" )))
+```
+
+```{r}
+# Normaliser les données 
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+normalize_z_score <- function(x) {
+  return ((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+
+# Liste des variables à normaliser
+variables_to_normalize <- c('slos', 'd.time', "num.co" ,'scoma', 'charges', 'totcst', 'totmcst', 'avtisst', 'meanbp', 'wblc', 'hrt', 'resp', 'temp', 'pafi', 'alb', 'bili', 'crea', 'sod', 'ph', 'glucose', 'bun', 'adls', 'adlsc', 'urine', "age")
+
+
+# Boucle pour appliquer la normalisation
+for (var in variables_to_normalize) {
+  patient_data[[var]] <- scale(patient_data[[var]])
+}
+patient_data
+```
+
+Suppression des colonnes inutiles
+```{r}
+colonnes_a_supprimer <- c("aps", "sps", "surv2m", "surv6m", "prg2m", "prg6m", "dnr", "dnrday", "sfdm2", "hospdead", "dzclass", "income", "charges", "totcst", "totmcst", "scoma", "edu", "race", "diabetes", "wblc", "hrt", "temp", "pafi", "sod", "ph", "adls")
+patient_data <- patient_data[, !(names(patient_data) %in% colonnes_a_supprimer)]
+patient_data
+```
+
+
+
+
+Visualisation des corrélations
+```{r}
+library(corrplot)
+cor_matrix <- cor(patient_data, use = "complete.obs")
+cor_matrix[abs(cor_matrix) < 0.5] <- 0
+corrplot(cor_matrix, method = "color")
+```
+
+# Modélisation avec régression logistique
+Séparation des données
+
+```{r}
+library(dplyr) # Manipulation des données
+library(pROC) # Analyse ROC et calcul de l'AUC
+library(ggplot2) # Visualisation des résultats
+library(caret)
+```
+
+Ajustement du modèle & Validation croisée avec K-Fold
+
+```{r}
+k_fold_cv <- function(data, K) {
+  n <- nrow(data)
+  foldK <- floor(n / K)
+  results <- numeric(K)
+  
+  for (i in 1:K) {
+    indk <- ((i - 1) * foldK + 1):(ifelse(i == K, n, i * foldK))
+    train_data <- data[-indk, ]
+    test_data <- data[indk, ]
+    modk <- glm(death ~ ., data = train_data, family = "binomial")
+    predicted_proba <- predict(modk, newdata = test_data, type = "response")
+    predicted_class <- ifelse(predicted_proba > 0.5, 1, 0)
+    conf_matrix <- table(test_data$death, predicted_class)
+    accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+    results[i] <- accuracy
+  }
+    best_index <- which.max(results)
+    indk <- ((best_index - 1) * foldK + 1):(ifelse(best_index == K, n, best_index * foldK))
+    train_data <- data[-indk, ]
+    test_data <- data[indk, ]
+    modk_best <- glm(death ~ ., data = train_data, family = "binomial")
+    mod_sum <- summary(modk_best)
+
+    print(mod_sum)
+    
+  return(list(results = results, modk_best = modk_best))
+}
+
+# Application avec K = 5 et K = 10
+perf_5 <- k_fold_cv(patient_data, 5)
+perf_10 <- k_fold_cv(patient_data, 10)
+
+# Afficher les précisions moyennes
+cat("Précision moyenne (5-fold):", round(mean(perf_5$results), 2), "\n")
+cat("Précision min (5-fold):", round(min(perf_5$results), 2), "\n")
+cat("Précision max (5-fold):", round(max(perf_5$results), 2), "\n\n")
+
+cat("Précision moyenne (10-fold):", round(mean(perf_10$results), 2), "\n")
+cat("Précision min (10-fold):", round(min(perf_10$results), 2), "\n")
+cat("Précision max (10-fold):", round(max(perf_10$results), 2), "\n")
+```
+
+Régression Ridge et Lasso
+
+Variable à supprimer pour un nouveau test
+```{r}
+cor_matrix <- cor(patient_data, use = "complete.obs")
+cor_matrix[abs(cor_matrix) < 0.5] <- 0
+corrplot(cor_matrix, method = "color")
+```
+
+```{r}
+
+res_support2 = perf_10$modk_best
+mod_sum <- summary(res_support2)
+
+print(mod_sum)
+
+```
+
+```{r}
+library(glmnet)
+cv_ridge <- cv.glmnet(as.matrix(patient_data), patient_data$death, alpha = 0)
+print(cv_ridge$lambda.min)
+```
+```{r}
+# glmnet nécessite une matrice pour les prédicteurs et un vecteur pour la variable cible
+x_train <- as.matrix(train_data[, !(names(train_data) %in% c("death"))]) # Variables explicatives
+y_train <- train_data$death # Variable cible
+
+x_test <- as.matrix(test_data[, !(names(test_data) %in% c("death"))])
+y_test <- test_data$death
+
+```
+
+
+```{r}
+# Ajustement Lasso
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1, family = "binomial")
+
+# Afficher le lambda optimal
+cat("Lambda optimal pour Lasso :", lasso_model$lambda.min, "\n")
+
+# Coefficients du modèle Lasso
+lasso_coefficients <- coef(lasso_model, s = lasso_model$lambda.min)
+print(lasso_coefficients)
+
+```
+
+
+```{r}
+# Ajustement Ridge
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0, family = "binomial")
+
+# Afficher le lambda optimal
+cat("Lambda optimal pour Ridge :", ridge_model$lambda.min, "\n")
+
+# Coefficients du modèle Ridge
+ridge_coefficients <- coef(ridge_model, s = ridge_model$lambda.min)
+print(ridge_coefficients)
+
+```
+
+
+```{r}
+# Prédictions pour Lasso
+lasso_pred_proba <- predict(lasso_model, newx = x_test, s = lasso_model$lambda.min, type = "response")
+lasso_pred_class <- ifelse(lasso_pred_proba > 0.5, 1, 0)
+
+# Matrice de confusion pour Lasso
+lasso_conf_matrix <- table(y_test, lasso_pred_class)
+cat("Matrice de confusion pour Lasso :\n")
+print(lasso_conf_matrix)
+
+# Précision pour Lasso
+lasso_accuracy <- sum(diag(lasso_conf_matrix)) / sum(lasso_conf_matrix)
+cat("Précision pour Lasso :", round(lasso_accuracy, 2), "\n")
+
+# Prédictions pour Ridge
+ridge_pred_proba <- predict(ridge_model, newx = x_test, s = ridge_model$lambda.min, type = "response")
+ridge_pred_class <- ifelse(ridge_pred_proba > 0.5, 1, 0)
+
+# Matrice de confusion pour Ridge
+ridge_conf_matrix <- table(y_test, ridge_pred_class)
+cat("Matrice de confusion pour Ridge :\n")
+print(ridge_conf_matrix)
+
+# Précision pour Ridge
+ridge_accuracy <- sum(diag(ridge_conf_matrix)) / sum(ridge_conf_matrix)
+cat("Précision pour Ridge :", round(ridge_accuracy, 2), "\n")
+```
+
+```{r}
+# Elastic Net : Mélange entre Lasso et Ridge
+set.seed(123)
+
+# Ajustement du modèle Elastic Net avec alpha = 0.5
+elastic_net_model <- cv.glmnet(
+  x_train, y_train,
+  alpha = 0.5, # Combinaison L1 et L2
+  family = "binomial"
+)
+
+# Afficher le lambda optimal
+cat("Lambda optimal pour Elastic Net :", elastic_net_model$lambda.min, "\n")
+
+# Coefficients du modèle Elastic Net
+elastic_net_coefficients <- coef(elastic_net_model, s = elastic_net_model$lambda.min)
+print(elastic_net_coefficients)
+
+# Prédictions sur l'ensemble de test
+elastic_net_pred_proba <- predict(elastic_net_model, newx = x_test, s = elastic_net_model$lambda.min, type = "response")
+elastic_net_pred_class <- ifelse(elastic_net_pred_proba > 0.5, 1, 0)
+
+# Matrice de confusion
+elastic_net_conf_matrix <- table(y_test, elastic_net_pred_class)
+cat("Matrice de confusion pour Elastic Net :\n")
+print(elastic_net_conf_matrix)
+
+# Précision pour Elastic Net
+elastic_net_accuracy <- sum(diag(elastic_net_conf_matrix)) / sum(elastic_net_conf_matrix)
+cat("Précision pour Elastic Net :", round(elastic_net_accuracy, 2), "\n")
+
+```
