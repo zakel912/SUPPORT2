@@ -1,4 +1,0 @@
-Arranger dzgroup (catégorique), dzclass (catégorique), income (catégorique), race (catégorique)
-remplir NA :  edu (17.95%), income (33%) scoma (<1%), charges (2%),  totcst (~10%), totmcst (38%), avtisst (0.9%), meanbp (0.01%), wblc (2.3%), hrt (0.01%), temp (0.01%), pafi (25.5%), alb (37%), bili (28.6%), crea (0.7%), sod (0.01%), ph (25.1%), glucose (49%), bun(47%), urine (53%), adlp (61%), adls (31%)
-à supprimer : edu 
-comment remplir les valeurs manquantes pour race ? qui est une variable à priori importante
